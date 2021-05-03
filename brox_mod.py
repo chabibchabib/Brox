@@ -60,7 +60,8 @@ def image_interpolation(Im,u,v):
     x=np.linspace(0,m-1,m)
     x,y=np.meshgrid(x,y)
     
-    x=x+u; y=y+v
+    x=x+u; 
+    y=y+v
     '''print('x')
     print(x)
     print('y')
@@ -151,10 +152,27 @@ def divergence_u(u,psi1,psi2,psi3,psi4):
     return div_u
 
 ################################################
+def div_du(psi1,psi2,psi3,psi4,du):
+    (n,m)=du.shape
+    div_du= np.empty((n,m),dtype=np.float32)
+    div_du[1:n-1,1:m-1]=psi1[1:n-1,1:m-1]*du[2:n,1:m-1]+psi2[1:n-1,1:m-1]*du[0:n-2,1:m-1]+psi3[1:n-1,1:m-1]*du[1:n-1,2:m]+psi4[1:n-1,1:m-1]*du[1:n-1,0:m-2]
+
+    div_du[0,1:m-1]=psi1[0,1:m-1]*du[1,1:m-1]+psi3[0,1:m-1]*du[0,2:m]+psi4[0,1:m-1]*du[0,0:m-2]
+    div_du[n-1,1:m-1]=psi2[n-1,1:m-1]*du[n-2,1:m-1]+psi3[n-1,1:m-1]*du[n-1,2:m]+psi4[n-1,1:m-1]*du[n-1,0:m-2]
+
+    div_du[1:n-1,0]=psi1[1:n-1,0]*du[2:n,0]+psi2[1:n-1,0]*du[0:n-2,0]+psi3[1:n-1,0]*du[1:n-1,1]
+    div_du[1:n-1,m-1]=psi1[1:n-1,m-1]*du[2:n,m-1]+psi2[1:n-1,m-1]*du[0:n-2,m-1]+psi4[1:n-1,m-1]*du[1:n-1,m-2]
+
+    div_du[0,0]=psi1[0,0]*du[1,0]+psi3[0,0]*du[0,1]
+    div_du[0,m-1]=psi1[0,m-1]*du[1,m-1]+psi4[0,m-1]*du[0,m-2]
+    div_du[n-1,0]=psi2[n-1,0]*du[n-2,0]+psi3[n-1,0]*du[n-1,1]
+    div_du[n-1,m-1]=psi2[n-1,m-1]*du[n-2,m-1]+psi4[n-1,m-1]*du[n-1,m-2]
+    return div_du
 
 ################################################
 
-def brox_opt_flow(Im1,Im2,u,v,gamma,alpha,inner_it,outer_it,a,eps):
+def brox_opt_flow(Im1,Im2,u,v,gamma,alpha,inner_it,outer_it,a,eps,w,iter_SOR,tol):
+    (n,m)=Im1.shape
     [I1x,I1y]=gradient(Im1)
     [I2x,I2y]=gradient(Im2)
 
@@ -189,8 +207,26 @@ def brox_opt_flow(Im1,Im2,u,v,gamma,alpha,inner_it,outer_it,a,eps):
             Du=psid**I2xw**2; Du=Du+gamma*psig*(I2xxw**2+I2xyw**2); Du=Du+alpha*div_d
             Dv=psid**I2yw**2; Dv=Dv+gamma*psig*(I2yyw**2+I2xyw**2); Dv=Dv+alpha*div_d
             D=psid*I2xw*I2yw+gamma*psig*(I2xxw+I2yyw)*I2xyw
+
+            error=1000; sor_it=0
+            while((error >tol) or sor_it<iter_SOR ):
+                error=0; sor_it=sor_it+1
+
+                div_duu=div_du(psi1,psi2,psi3,psi4,du)
+                div_dv=div_du(psi1,psi2,psi3,psi4,dv)
+                du0=du; dv0=dv
+                du= (1-w) * du + w * (Au - D * dv + alpha * div_duu) / Du
+                dv= (1-w) * dv + w * (Av - D * du + alpha * div_dv) / Dv
+                error=np.linalg.norm((du-du0))+np.linalg.norm((dv-dv0))
+                error=math.sqrt(error/n*m)
             
-            
+            u=u+du; v=v+dv 
+        
+    return[u,v]
+
+
+
+
         
 
 
@@ -200,7 +236,7 @@ def brox_opt_flow(Im1,Im2,u,v,gamma,alpha,inner_it,outer_it,a,eps):
     
 ################################################
 #A=np.floor(10*np.random.rand(4,4)) 
-A=[[6., 3., 4. ,8.,6.]
+'''A=[[6., 3., 4. ,8.,6.]
  ,[6. ,5., 3. ,1.,0.]
  ,[9. ,1. ,9., 5.,1.]
  ,[5., 8. ,4., 6.,7.]]
@@ -210,11 +246,9 @@ print(A)
 [psi1,psi2,psi3,psi4]=psi_divergence(A)
 u=np.ones(A.shape); v=2*np.ones(A.shape)
 #u=np.random.rand(4,5)
-div_u=divergence_u(u,psi1,psi2,psi3,psi4)
-print('div_u')
-print(div_u)
-'''image_interpolation(A,u,v)
-[Ixx,Iyy,Ixy]=second_deriv(A)
-print(Ixx)
-print(Iyy)
-print(Ixy)'''
+#div_u=divergence_u(u,psi1,psi2,psi3,psi4)
+
+[u,v]=brox_opt_flow(A,2*A,u,v,1,2,3,4,0.5,0.001,0.5,5,0.001)
+
+print(u)
+print(v)'''
